@@ -1,25 +1,46 @@
 #!/bin/bash
+#Version 2.0
 
 #Directory which contains AUR git folders
 gitdir=/home/james-arch/aur-git/
 
-cd $gitdir
+cd $gitdir #cd 0
 updatenum=0
 
 for d in *; do
-  #Get name of git project w/o "-git" on the end. E.g., in folder libdrm-git, extract the name libdrm as a variable
-  dname=`echo $d | sed 's/-git//g'`
-  cd $d/src/$dname
-  git fetch > /dev/null 2>&1
-  wc=`git diff master origin/master | wc -w`
-    if [ $wc -gt 0 ];
-      then
-	$[updatenum++]
-	update[$updatenum]=$dname
-      else
-	cd $gitdir
-    fi
-  cd $gitdir
+  if [ -d $d/src/ ];
+    then
+      cd $gitdir/$d/src/ #cd 1
+	for subd in *; do
+	  cd $subd # cd 2
+	  gittest=$(ls -a | grep -x .git)
+	  if [ -n $gittest ];
+	    then
+	      varname=$(echo $d | sed 's/-//g')
+	      export gitfound_$varname=true
+	      git fetch > /dev/null 2>&1
+	      wc=`git diff master origin/master | wc -w`
+	      if [ $wc -gt 0 ];
+		then
+		  $[updatenum++]
+		  update[$updatenum]=$d
+		  cd $gitdir/$d/src/ #cd 3
+		else
+		  cd $gitdir/$d/src #cd 4
+	      fi
+	    else
+	      cd $gitdir/$d/src/ #cd 5
+	  fi
+	done
+      cd $gitdir #cd 6
+    else
+      echo "No source directory for $d. Please download source with PKGBUILD script before attempting to update."
+  fi
+  gitfound=$(eval "echo \$gitfound_$varname")
+  if [ "$gitfound" != "true" ];
+    then
+      echo "No git directory found for package $d. Cannot update non-git repositories"
+  fi
 done
 
 tmpfile=$(mktemp)
