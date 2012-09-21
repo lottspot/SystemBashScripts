@@ -51,7 +51,7 @@ done
 
 if [ -s $tmpfile ];
   then
-    notify-send "Git package updates available" "The following git updates are available: \n\n $(cat $tmpfile)"
+    DISPLAY=:0 notify-send "Git package updates available" "The following git updates are available: \n\n $(cat $tmpfile)"
   else
     exit
 fi
