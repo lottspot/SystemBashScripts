@@ -22,7 +22,7 @@ for d in *; do
 	      wc=`git diff master origin/master | wc -w`
 	      if [ $wc -gt 0 ];
 		then
-		  $[updatenum++]
+		  (( updatenum++ ))
 		  update[$updatenum]=$d
 		  cd $gitdir/$d/src/ #cd 3
 		else
