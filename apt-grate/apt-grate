@@ -1,0 +1,155 @@
+#!/bin/bash
+
+# Specifies directory in which to search for apt-grate.conf file
+CONF_DIR=/usr/local/etc
+
+# Check that script is run with root privileges
+if [[ $(id -u) -gt 0 ]];
+	then
+		echo "Please run apt-grate as root." >&2
+		exit 1
+fi
+
+# Check for presence of configuration file
+if [[ -f $CONF_DIR/apt-grate.conf ]];
+	then
+		# Import config file, override backup path if provided
+		if [[ -d $2 ]];
+			then
+				source $CONF_DIR/apt-grate.conf
+				BKPATH=$2
+			else
+				source $CONF_DIR/apt-grate.conf
+				if [[ ! -d $BKPATH ]];
+					then
+						echo "Backup path is not a valid directory. Please update apt-grate.conf or append valid backup directory to script call." >&2
+						exit 1
+				fi
+		fi
+		if [[ -z $(ls /etc/apt/sources.list.d) || ! -d /etc/apt/sources.list.d ]];
+			then
+				PPA_Repositores=false
+		fi
+	else
+		if [[ -d $2 ]];
+			then
+				# Initialize defaults if no config file found
+				BKPATH=$2
+				Main_Repositories=true
+				GPG_Keys=true
+				if [[ -d /etc/apt/sources.list.d && -n $(ls /etc/apt/sources.list.d) ]];
+					then
+						PPA_Repositores=true
+					else
+						PPA_Repositores=false
+				fi
+				Installed_Software=true
+			else
+				echo "apt-grate.conf not found. Please append a valid directory path to backup to/restore from" >&2
+				exit 1
+		fi
+fi
+BKFILES=()
+case $1 in
+	backup)
+# Backup main repositories
+		if $Main_Repositories;
+			then
+				cp /etc/apt/sources.list $BKPATH/sources.list.bak >/dev/null 2>&1
+				BKFILES+=('sources.list.bak')
+				echo "Backed up main repositores"
+		fi
+# Backup main repo GPG keys
+		if $GPG_Keys;
+			then
+				apt-key exportall > $BKPATH/repositories.key 2>/dev/null
+				BKFILES+=('repositories.key')
+				echo "Backed up repository GPG Keys"
+		fi
+# Backup PPAs
+		if $PPA_Repositories;
+			then
+				tar cpzf $BKPATH/sources.list.d.tar.gz /etc/apt/sources.list.d/* >/dev/null 2>&1
+				BKFILES+=('sources.list.d.tar.gz')
+				echo "Backed up PPAs"
+		fi
+# Backup list of installed software
+		if $Installed_Software;
+			then
+				dpkg --get-selections | awk '{print $1;}' > $BKPATH/packages.lst 2>/dev/null
+				BKFILES+=('packages.lst')
+				echo "Backed up installed software listing"
+		fi
+# Store relevant configurations for restore operation
+		BKFILES+=('apt-grate.conf.restore')
+		echo "Main_Repositories=$Main_Repositories" > $BKPATH/apt-grate.conf.restore
+		echo "GPG_Keys=$GPG_Keys" >> $BKPATH/apt-grate.conf.restore
+		echo "PPA_Repositories=$PPA_Repositories" >> $BKPATH/apt-grate.conf.restore
+		echo "Installed_Software=$Installed_Software" >> $BKPATH/apt-grate.conf.restore
+		echo "BKFILES=(${BKFILES[*]})" >> $BKPATH/apt-grate.conf.restore
+		echo "Backup configurations saved"
+# Tidy up by storing in an archive
+		TARFILES=()
+		for file in ${BKFILES[*]}; do
+			TARFILES+="$file "
+		done
+		cd $BKPATH
+		tar cpf apt-grate.tar ${TARFILES[*]} >/dev/null 2>&1
+# Clean up
+		for file in ${BKFILES[*]}; do
+			rm $BKPATH/$file
+		done
+		echo "Backup stored in archive $BKPATH/apt-grate.tar"
+		;;
+	restore)
+		if [[ ! -f $BKPATH/apt-grate.tar ]]
+			then
+				echo "apt-grate.tar not located. Please choose a valid directory which has been backed up to using apt-grate backup" >&2
+				exit 1
+		fi
+# Inflate backup archive
+		echo "Inflating backup archive & restoring files..."
+		tar xf $BKPATH/apt-grate.tar -C $BKDIR >/dev/null 2>&1
+# Restore backup specific settings
+		source $BKPATH/apt-grate.conf.restore
+# Restore main repositiories
+		if $Main_Repositories;
+			then
+				cp $BKPATH/sources.list.bak /etc/apt/sources.list >/dev/null 2>&1
+		fi
+# Restore GPG keys
+		if $GPG_Keys;
+			then
+				apt-key add $BKPATH/repositories.key >/dev/null 2>&1
+		fi
+# Restore PPAs
+		if $PPA_Repositories;
+			then
+				# --> Add check for sources.list.d directory here <--
+				tar xzf $BKPATH/sources.list.d.tar.gz -C /etc/apt/sources.list.d >/dev/null 2>&1
+		fi
+# Restore installed software
+		if $Installed_Software;
+			then
+				echo "Refreshing repository list & restoring installed software..."
+				apt-get update >/dev/null
+				apt-get install $(cat $BKPATH/packages.lst)
+		fi
+# Clean up
+		echo "Cleaning up..."
+		for file in ${BKFILES[*]}; do
+			rm $BKPATH/$file >/dev/null 2>&1
+		done
+		echo -n "Remove apt-grate.tar? (y/n): "
+		read tarclean
+		if [[ ${tarclean,,} == "y" ]];
+			then
+				rm $BKPATH/apt-grate.tar >/dev/null 2>&1
+		fi
+# All done!
+		echo "Restoration complete"
+		;;
+	*)
+		echo -e "Usage: apt-grate {backup | restore} [/path/to/backup]"
+		;;
+	esac
