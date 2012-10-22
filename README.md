@@ -11,7 +11,8 @@ INSTALLATION:
 Copy apt-grat.conf to /usr/local/etc
 Copy apt-grate to wherever you'd like (/usr/local/bin would be a sensible choice)
 
-USAGE:
+USAGE: 
+
 apt-grate.conf
  - Change any option you don't want included in the backup to "false"
  - Change BKDIR to path to directory you want backup archive to be stored
